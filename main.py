@@ -3,6 +3,17 @@ from sanic.response import text, json
 import aiosqlite
 import jwt
 
+
+def text_to_bits(text, encoding='utf-8', errors='surrogatepass'):
+    bits = bin(int.from_bytes(text.encode(encoding, errors), 'big'))[2:]
+    return bits.zfill(8 * ((len(bits) + 7) // 8))
+
+
+def text_from_bits(bits, encoding='utf-8', errors='surrogatepass'):
+    n = int(bits, 2)
+    return n.to_bytes((n.bit_length() + 7) // 8, 'big').decode(encoding, errors) or '\0'
+
+
 app = Sanic("HCSA-BACKEND")
 
 
@@ -48,8 +59,11 @@ async def add_account(request):
 
 @app.get("/login")
 async def login(request):
-    username = request.args.get("username", None)
-    password = request.args.get("password", None)
+    # ignore case on username
+    username = (request.args.get("username", None) or "").lower()
+    password = text_to_bits(request.args.get("password", None))
+    # print the username and password
+    print(username, password)
     if username and password:
         # check if the user exists in the database
         cursor = await request.app.ctx.db.cursor()
@@ -64,11 +78,11 @@ async def login(request):
                 # delete the old session
                 del request.app.ctx.sessions[username]
 
-            token = jwt.encode({"username": username}, "secret", algorithm="HS256")
+            token = jwt.encode({"username": username}, "3rousdfhsonf8we4yfbhwnodsnfy8sbdfn9sd", algorithm="HS256")
             request.app.ctx.sessions[username] = token
-            return text(token)
-        return text("Invalid username or password")
-    return text("Invalid username or password")
+            return json({"token": token})
+        return json({"error": "Invalid username or password"}, status=401)
+    return json({"error": "Missing username or password"}, status=400)
 
 
 @app.get("/logout")
@@ -86,7 +100,8 @@ async def logout(request):
 @app.get("/user")
 async def get_user(request):
     token = request.args.get("token", None)
-    if token:
+    # check if the token signed by the server
+    if token and jwt.decode(token, "3rousdfhsonf8we4yfbhwnodsnfy8sbdfn9sd", algorithms=["HS256"]):
         for username, session_token in request.app.ctx.sessions.items():
             if session_token == token:
                 cursor = await request.app.ctx.db.cursor()
@@ -96,8 +111,8 @@ async def get_user(request):
                 user = await cursor.fetchone()
                 await cursor.close()
                 return json({"username": user[0], "name": user[2]})
-        return text("Invalid token")
-    return text("Invalid token")
+        return json({"error": "Invalid token"}, status=401)
+    return json({"error": "Invalid token"}, status=401)
 
 
 @app.get("/announcement")
