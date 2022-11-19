@@ -1,5 +1,5 @@
 from sanic import Sanic
-from sanic.response import text
+from sanic.response import text, json
 import aiosqlite
 import jwt
 
@@ -79,6 +79,23 @@ async def logout(request):
             if session_token == token:
                 del request.app.ctx.sessions[username]
                 return text("Logged out")
+        return text("Invalid token")
+    return text("Invalid token")
+
+
+@app.get("/user")
+async def get_user(request):
+    token = request.args.get("token", None)
+    if token:
+        for username, session_token in request.app.ctx.sessions.items():
+            if session_token == token:
+                cursor = await request.app.ctx.db.cursor()
+                await cursor.execute(
+                    "SELECT * FROM accounts WHERE username=?", (username,)
+                )
+                user = await cursor.fetchone()
+                await cursor.close()
+                return json({"username": user[0], "name": user[2]})
         return text("Invalid token")
     return text("Invalid token")
 
