@@ -22,7 +22,7 @@ async def setup(app_, loop):
     app_.ctx.db = await aiosqlite.connect("database.db")
     await try_create_db(app_.ctx.db)
     app_.ctx.sessions = {}
-    app_.ctx.announcement = ""
+    app_.ctx.announcement = "The Dashboard is finally finished!"
 
 
 async def try_create_db(db):
@@ -61,9 +61,9 @@ async def add_account(request):
 async def login(request):
     # ignore case on username
     username = (request.args.get("username", None) or "").lower()
-    password = text_to_bits(request.args.get("password", None))
-    # print the username and password
+    password = text_to_bits(request.args.get("password", ""))
     print(username, password)
+    cursor = await request.app.ctx.db.cursor()
     if username and password:
         # check if the user exists in the database
         cursor = await request.app.ctx.db.cursor()
@@ -110,26 +110,29 @@ async def get_user(request):
                 )
                 user = await cursor.fetchone()
                 await cursor.close()
-                return json({"username": user[0], "name": user[2]})
+                return json({"username": user[0], "name": user[2], "announcement": request.app.ctx.announcement})
         return json({"error": "Invalid token"}, status=401)
     return json({"error": "Invalid token"}, status=401)
 
 
 @app.get("/announcement")
 async def announcement(request):
-    return text(request.app.ctx.announcement)
+    return json({"announcement": str(request.app.ctx.announcement)})
 
 
 @app.get("/set_announcement")
 async def set_announcement(request):
+    print("hi")
     token = request.args.get("token", None)
     if token:
         for username, session_token in request.app.ctx.sessions.items():
             if session_token == token:
                 request.app.ctx.announcement = request.args.get("announcement", "")
-                return text("Announcement set")
-        return text("Invalid token")
-    return text("Invalid token")
+                # print the announcement, and who changed it
+                print(request.app.ctx.announcement, username)
+                return json({"success": True})
+        return json({"error": "Invalid token"}, status=401)
+    return json({"error": "Invalid token"}, status=401)
 
 
 app.register_listener(setup, "before_server_start")
